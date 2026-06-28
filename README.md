@@ -6,6 +6,9 @@ Online (MTGO)** decklists, rank them, and export them as MTGO-importable text.
 > **Status: Phase 2** — fetches and caches real decklists, validates card names,
 > ranks them, and exports the one you pick.
 
+> **New to the command line?** See **[HOW_TO_USE.md](HOW_TO_USE.md)** — a plain-language,
+> copy-paste runbook that needs no coding knowledge.
+
 ## Quickstart
 
 ```sh
