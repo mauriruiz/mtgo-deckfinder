@@ -1,8 +1,12 @@
 //! Pure "what does it cost to complete this deck?" computation, against a loaded
 //! collection and a price table. No IO — fully unit-testable.
+//!
+//! Basic lands are ignored entirely: they are free and unlimited in MTGO, so
+//! they never count toward missing cards or completion cost.
 
 use std::collections::HashMap;
 
+use crate::cards::is_basic_land;
 use crate::collection::Collection;
 use crate::model::Deck;
 use crate::price::PriceTable;
@@ -30,6 +34,9 @@ pub fn deck_gap(deck: &Deck, collection: &Collection, prices: &PriceTable) -> Ga
     let mut cards_missing = 0;
     let mut cost_to_complete = 0.0;
     for (name, total) in needed {
+        if is_basic_land(name) {
+            continue; // free and unlimited in MTGO
+        }
         let missing = total.saturating_sub(collection.owned(name));
         cards_missing += missing;
         cost_to_complete += f64::from(missing) * prices.get(name).unwrap_or(0.0);
@@ -104,5 +111,69 @@ mod tests {
         assert_eq!(gap.cards_missing, 0);
         assert!((gap.cost_to_complete).abs() < 1e-9);
         assert!(gap.buildable_now);
+    }
+
+    /// The test that would have caught the basic-land bug: a deck whose every
+    /// non-basic card is owned, plus a pile of (unowned) basics, is buildable.
+    #[test]
+    fn basic_lands_never_count_even_when_unowned() {
+        // Collection owns the spells but NO basic lands at all.
+        let coll =
+            parse_collection_csv("Card Name,Quantity\nLightning Bolt,4\nPsychic Frog,2\n").unwrap();
+        let prices = PriceTable::from_pairs([("Mountain".to_string(), 0.02)]);
+        let d = deck(
+            &[
+                ("Lightning Bolt", 4),
+                ("Mountain", 12),
+                ("Snow-Covered Island", 4),
+            ],
+            &[("Psychic Frog", 2)],
+        );
+        let gap = deck_gap(&d, &coll, &prices);
+        assert_eq!(gap.cards_missing, 0);
+        assert!((gap.cost_to_complete).abs() < 1e-9);
+        assert!(gap.buildable_now);
+    }
+
+    /// Split, DFC, and accented cards are counted as owned even when the
+    /// collection writes them in a differently-formatted but equivalent spelling.
+    #[test]
+    fn matches_split_dfc_and_accented_names_across_spellings() {
+        // Collection writes the split with spaces and uses a precomposed accent.
+        let coll = parse_collection_csv(
+            "Card Name,Quantity\n\"Wear // Tear\",2\nDelver of Secrets,4\n\"Lim-Dûl's Vault\",1\n",
+        )
+        .unwrap();
+        // Deck uses MTGO forms: split as A/B, DFC front face, decomposed accent.
+        let d = deck(
+            &[
+                ("Wear/Tear", 2),
+                ("Delver of Secrets", 4),
+                ("Lim-Du\u{0302}l's Vault", 1),
+            ],
+            &[],
+        );
+        let gap = deck_gap(&d, &coll, &PriceTable::from_pairs([]));
+        assert_eq!(gap.cards_missing, 0, "equivalent spellings must match");
+        assert!(gap.buildable_now);
+    }
+
+    /// Exactly N genuinely-unowned non-basic copies are missing; basics ignored.
+    #[test]
+    fn counts_only_unowned_non_basics() {
+        let coll = parse_collection_csv("Card Name,Quantity\nLlanowar Elves,4\n").unwrap();
+        let prices = PriceTable::from_pairs([("Sheoldred, the Apocalypse".to_string(), 30.0)]);
+        let d = deck(
+            &[
+                ("Llanowar Elves", 4),            // owned → 0 missing
+                ("Sheoldred, the Apocalypse", 3), // unowned → 3 missing
+                ("Forest", 24),                   // basic → ignored
+            ],
+            &[],
+        );
+        let gap = deck_gap(&d, &coll, &prices);
+        assert_eq!(gap.cards_missing, 3);
+        assert!((gap.cost_to_complete - 90.0).abs() < 1e-9); // 3 * 30.0
+        assert!(!gap.buildable_now);
     }
 }

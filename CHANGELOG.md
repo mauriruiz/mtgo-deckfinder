@@ -65,6 +65,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Collection gap (`buildable` / `cheapest`) no longer counts basic lands. They
+  are free and unlimited in MTGO, so they never contribute to `cards_missing` or
+  `cost_to_complete` (incl. snow-covered basics).
 - `slug_date` parsed the separator dash before the year as a negative year, so
   events on days ≥10 sorted below early-month ones and `fetch` only ever picked
   the first nine days of the month. Now anchors the date to a digit.

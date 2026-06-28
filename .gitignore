@@ -1,3 +1,5 @@
 /target
 /deck.txt
 .DS_Store
+# Personal MTGO collection exports dropped in the repo root (never commit these).
+/*.csv

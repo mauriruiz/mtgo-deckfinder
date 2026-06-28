@@ -49,6 +49,27 @@ pub fn lookup_key(name: &str) -> String {
     key(name)
 }
 
+/// True for basic lands, including snow-covered ones. In MTGO these are free and
+/// unlimited, so they never count toward a deck's missing cards or completion
+/// cost regardless of what the player owns.
+pub fn is_basic_land(name: &str) -> bool {
+    matches!(
+        key(name).as_str(),
+        "plains"
+            | "island"
+            | "swamp"
+            | "mountain"
+            | "forest"
+            | "wastes"
+            | "snow-covered plains"
+            | "snow-covered island"
+            | "snow-covered swamp"
+            | "snow-covered mountain"
+            | "snow-covered forest"
+            | "snow-covered wastes"
+    )
+}
+
 /// Per-card facts used by the rest of the tool.
 #[derive(Debug, Clone)]
 pub struct CardInfo {
