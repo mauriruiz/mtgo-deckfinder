@@ -9,21 +9,26 @@
 //! validation ([`NameReference`]), and a timestamped disk [`Cache`].
 
 pub mod cache;
+pub mod cards;
+pub mod cluster;
 pub mod error;
 pub mod export;
 pub mod http;
 pub mod model;
-pub mod names;
 pub mod rank;
 pub mod sample;
 pub mod source;
 pub mod store;
 
 pub use cache::{Cache, Cached};
+pub use cards::{CardInfo, CardRecord, CardReference, download_atomic_cards, normalize_name};
+pub use cluster::{Clustering, SIMILARITY_THRESHOLD, cluster_decks};
 pub use error::{Error, Result};
 pub use export::export_mtgo_txt;
-pub use model::{CardEntry, Color, Deck, EventResult, EventType, Format};
-pub use names::{NameReference, download_atomic_names, normalize_name};
+pub use model::{
+    CardEntry, Color, ColorMatch, Deck, EventResult, EventType, Format, color_matches,
+    colors_label, parse_colors,
+};
 pub use rank::{DEFAULT_WEIGHTS, Scored, Weights, rank_decks, score};
 pub use sample::sample_deck;
 pub use source::{DeckSource, WotcMtgoSource};

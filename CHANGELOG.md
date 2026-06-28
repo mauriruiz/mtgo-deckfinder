@@ -8,6 +8,19 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Phase 3: archetype clustering by maindeck card overlap (`cluster::cluster_decks`,
+  single-linkage at ≥80% shared cards), each cluster labeled by its most common
+  non-land cards. Deterministic and tested.
+- Popularity (archetype cluster size) now contributes to ranking via the
+  `Weights` table.
+- `list --archetypes` shows the most popular archetypes with a best representative
+  each ("most popular archetype" view).
+- Color detection: each deck's color identity is derived from the MTGJSON
+  reference and stored. Filter with `list`/`export --colors WUBRG` and
+  `--color-match subset|exact|includes` (default `subset`).
+- The card reference (`CardReference`, formerly `NameReference`) now also carries
+  color identity and land flags; cache file is `cards.json`.
+
 - Phase 2: pure, deterministic `Ranker` (`rank::rank_decks`) combining recency
   (14-day half-life), source reliability, and result strength via a single
   tunable `Weights` table (popularity/price reserved as hooks).

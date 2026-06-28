@@ -1,9 +1,10 @@
 //! Pure deck ranking. No IO, no clock — `today` is passed in — so the whole
 //! module is deterministic and unit-testable.
 //!
-//! `score = w_recency·recency + w_source·source + w_result·result`, each factor
-//! normalized to 0..1 and combined via the single [`Weights`] table. Popularity
-//! (Phase 3) and price (Phase 4) are declared as weight hooks but not yet scored.
+//! `score = w_recency·recency + w_source·source + w_result·result +
+//! w_popularity·popularity`, each factor normalized to 0..1 and combined via the
+//! single [`Weights`] table. Popularity (archetype cluster size) is supplied by
+//! the caller; price (Phase 4) remains a reserved weight hook.
 
 use chrono::NaiveDate;
 
@@ -18,7 +19,7 @@ pub struct Weights {
     pub recency: f64,
     pub source: f64,
     pub result: f64,
-    /// Phase 3 hook (archetype popularity) — not yet scored.
+    /// Archetype popularity (cluster size).
     pub popularity: f64,
     /// Phase 4 hook (price) — not yet scored.
     pub price: f64,
@@ -26,10 +27,10 @@ pub struct Weights {
 
 /// Default weights (sum to 1, so scores land in ~0..1).
 pub const DEFAULT_WEIGHTS: Weights = Weights {
-    recency: 0.4,
-    source: 0.2,
-    result: 0.4,
-    popularity: 0.0,
+    recency: 0.35,
+    source: 0.15,
+    result: 0.35,
+    popularity: 0.15,
     price: 0.0,
 };
 
@@ -39,20 +40,29 @@ pub struct Scored<'a> {
     pub score: f64,
 }
 
-/// Combined score for one deck.
-pub fn score(deck: &Deck, today: NaiveDate, w: &Weights) -> f64 {
+/// Combined score for one deck. `popularity` is the deck's normalized archetype
+/// popularity (0..1), supplied by the caller.
+pub fn score(deck: &Deck, today: NaiveDate, w: &Weights, popularity: f64) -> f64 {
     w.recency * recency(deck.date, today)
         + w.source * source_reliability(&deck.source)
         + w.result * result_strength(deck.event_type, &deck.result)
+        + w.popularity * popularity
 }
 
 /// Decks ranked best-first. Deterministic: score desc, then date desc, then id.
-pub fn rank_decks<'a>(decks: &'a [Deck], today: NaiveDate, w: &Weights) -> Vec<Scored<'a>> {
+/// `popularity` is parallel to `decks` (0..1 each); pass all-zero to ignore it.
+pub fn rank_decks<'a>(
+    decks: &'a [Deck],
+    today: NaiveDate,
+    w: &Weights,
+    popularity: &[f64],
+) -> Vec<Scored<'a>> {
     let mut scored: Vec<Scored<'a>> = decks
         .iter()
-        .map(|d| Scored {
+        .enumerate()
+        .map(|(i, d)| Scored {
             deck: d,
-            score: score(d, today, w),
+            score: score(d, today, w, popularity.get(i).copied().unwrap_or(0.0)),
         })
         .collect();
     scored.sort_by(|a, b| {
@@ -148,7 +158,20 @@ mod tests {
             price: 0.0,
         };
         let d = deck("x", ymd(2026, 6, 14), EventType::Challenge, None, None); // 14 days old
-        assert!((score(&d, TODAY(), &w) - 0.5).abs() < 1e-9);
+        assert!((score(&d, TODAY(), &w, 0.0) - 0.5).abs() < 1e-9);
+    }
+
+    #[test]
+    fn popularity_raises_score() {
+        let w = Weights {
+            recency: 0.0,
+            source: 0.0,
+            result: 0.0,
+            popularity: 1.0,
+            price: 0.0,
+        };
+        let d = deck("x", TODAY(), EventType::Challenge, Some(5), Some(0));
+        assert!(score(&d, TODAY(), &w, 0.9) > score(&d, TODAY(), &w, 0.1));
     }
 
     #[test]
@@ -161,7 +184,10 @@ mod tests {
             Some(0),
         );
         let old = deck("b", ymd(2026, 6, 1), EventType::Challenge, Some(5), Some(0));
-        assert!(score(&new, TODAY(), &DEFAULT_WEIGHTS) > score(&old, TODAY(), &DEFAULT_WEIGHTS));
+        assert!(
+            score(&new, TODAY(), &DEFAULT_WEIGHTS, 0.0)
+                > score(&old, TODAY(), &DEFAULT_WEIGHTS, 0.0)
+        );
     }
 
     #[test]
@@ -179,9 +205,9 @@ mod tests {
         let prelim_top = deck("p", t, EventType::Preliminary, Some(5), Some(0));
         let chal_weak = deck("w", t, EventType::Challenge, Some(2), Some(3)); // sub-.500
 
-        assert!(score(&chal_top, t, &w) > score(&league, t, &w));
-        assert!(score(&league, t, &w) > score(&prelim_top, t, &w));
-        assert!(score(&league, t, &w) > score(&chal_weak, t, &w));
+        assert!(score(&chal_top, t, &w, 0.0) > score(&league, t, &w, 0.0));
+        assert!(score(&league, t, &w, 0.0) > score(&prelim_top, t, &w, 0.0));
+        assert!(score(&league, t, &w, 0.0) > score(&chal_weak, t, &w, 0.0));
     }
 
     #[test]
@@ -203,11 +229,15 @@ mod tests {
                 Some(2),
             ),
         ];
-        let r = rank_decks(&decks, TODAY(), &DEFAULT_WEIGHTS);
+        let pop = vec![0.0; decks.len()];
+        let r = rank_decks(&decks, TODAY(), &DEFAULT_WEIGHTS, &pop);
         assert!(r[0].score >= r[1].score && r[1].score >= r[2].score);
         assert_eq!(r[0].deck.id, "a"); // newest + strong challenge ranks first
 
         let ids = |v: &[Scored]| v.iter().map(|s| s.deck.id.clone()).collect::<Vec<_>>();
-        assert_eq!(ids(&r), ids(&rank_decks(&decks, TODAY(), &DEFAULT_WEIGHTS)));
+        assert_eq!(
+            ids(&r),
+            ids(&rank_decks(&decks, TODAY(), &DEFAULT_WEIGHTS, &pop))
+        );
     }
 }

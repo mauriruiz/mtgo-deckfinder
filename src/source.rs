@@ -16,10 +16,10 @@ use std::collections::HashMap;
 use chrono::{Datelike, NaiveDate};
 use serde::Deserialize;
 
+use crate::cards::normalize_name;
 use crate::error::{Error, Result};
 use crate::http::PoliteClient;
 use crate::model::{CardEntry, Deck, EventResult, EventType, Format};
-use crate::names::normalize_name;
 
 const INDEX_URL: &str = "https://www.mtgo.com/decklists";
 const BASE_URL: &str = "https://www.mtgo.com";
@@ -406,7 +406,7 @@ struct RawRank {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::names::NameReference;
+    use crate::cards::CardReference;
 
     const INDEX: &str = include_str!("../tests/fixtures/mtgo_index.html");
     const DETAIL: &str = include_str!("../tests/fixtures/mtgo_detail.html");
@@ -484,7 +484,7 @@ mod tests {
 
     #[test]
     fn every_parsed_card_name_passes_validation() {
-        let names = NameReference::from_atomic_reader(ATOMIC.as_bytes()).unwrap();
+        let names = CardReference::from_atomic_reader(ATOMIC.as_bytes()).unwrap();
         let decks = decks_from(DETAIL).into_iter().chain(decks_from(LEAGUE));
         for deck in decks {
             for card in deck.maindeck.iter().chain(&deck.sideboard) {

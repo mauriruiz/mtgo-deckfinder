@@ -8,6 +8,7 @@ use chrono::{DateTime, Duration, Utc};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 
+use crate::cards::CardRecord;
 use crate::error::{Error, Result};
 use crate::model::{Deck, Format};
 
@@ -70,12 +71,12 @@ impl Cache {
         self.write(&decks_file(format), decks, now)
     }
 
-    pub fn read_names(&self) -> Result<Option<Cached<Vec<String>>>> {
-        self.read("card-names.json")
+    pub fn read_cards(&self) -> Result<Option<Cached<Vec<CardRecord>>>> {
+        self.read("cards.json")
     }
 
-    pub fn write_names(&self, keys: &[String], now: DateTime<Utc>) -> Result<()> {
-        self.write("card-names.json", keys, now)
+    pub fn write_cards(&self, records: &[CardRecord], now: DateTime<Utc>) -> Result<()> {
+        self.write("cards.json", records, now)
     }
 }
 
