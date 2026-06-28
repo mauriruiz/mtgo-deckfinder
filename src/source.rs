@@ -13,7 +13,7 @@
 
 use std::collections::HashMap;
 
-use chrono::NaiveDate;
+use chrono::{Datelike, NaiveDate};
 use serde::Deserialize;
 
 use crate::error::{Error, Result};
@@ -111,10 +111,19 @@ fn select_recent(slugs: &[&str], format: Format, limit: usize) -> Vec<String> {
 }
 
 /// First `YYYY-MM-DD` embedded in a slug.
+///
+/// The window must start on a digit, otherwise the separator dash before the
+/// year (`...-2026-06-28...`) parses as a negative year (`-2026`), which sorted
+/// every day ≥10 to the bottom. The year is also range-checked for safety.
 fn slug_date(slug: &str) -> Option<NaiveDate> {
     let bytes = slug.as_bytes();
     for i in 0..bytes.len().saturating_sub(9) {
-        if let Ok(d) = NaiveDate::parse_from_str(&slug[i..i + 10], "%Y-%m-%d") {
+        if !bytes[i].is_ascii_digit() {
+            continue;
+        }
+        if let Ok(d) = NaiveDate::parse_from_str(&slug[i..i + 10], "%Y-%m-%d")
+            && (2000..2100).contains(&d.year())
+        {
             return Some(d);
         }
     }
@@ -404,6 +413,10 @@ mod tests {
     const LEAGUE: &str = include_str!("../tests/fixtures/mtgo_league.html");
     const ATOMIC: &str = include_str!("../tests/fixtures/atomic_cards_sample.json");
 
+    fn ymd(y: i32, m: u32, d: u32) -> NaiveDate {
+        NaiveDate::from_ymd_opt(y, m, d).unwrap()
+    }
+
     fn decks_from(html: &str) -> Vec<Deck> {
         let json = extract_event_json(html).unwrap();
         let raw: RawEvent = serde_json::from_str(json).unwrap();
@@ -413,8 +426,22 @@ mod tests {
     #[test]
     fn extracts_all_event_slugs() {
         let slugs = extract_event_slugs(INDEX);
-        assert_eq!(slugs.len(), 7);
+        assert_eq!(slugs.len(), 9);
         assert!(slugs.iter().all(|s| s.starts_with("/decklist/")));
+    }
+
+    #[test]
+    fn slug_date_parses_days_past_the_ninth() {
+        // Regression: the separator dash must not be read as a negative year.
+        assert_eq!(
+            slug_date("modern-league-2026-06-2810847"),
+            Some(ymd(2026, 6, 28))
+        );
+        assert_eq!(
+            slug_date("modern-challenge-32-2026-06-0112843430"),
+            Some(ymd(2026, 6, 1))
+        );
+        assert_eq!(slug_date("no-date-here"), None);
     }
 
     #[test]
@@ -423,8 +450,9 @@ mod tests {
         let recent = select_recent(&slugs, Format::Modern, 2);
         assert_eq!(recent.len(), 2);
         assert!(recent.iter().all(|s| s.starts_with("/decklist/modern-")));
-        // 2026-06-06 events sort before the 2026-06-01 one.
-        assert!(recent[0].contains("2026-06-06"));
+        // 06-28 and 06-15 must outrank the early-June events.
+        assert!(recent[0].contains("2026-06-28"));
+        assert!(recent[1].contains("2026-06-15"));
     }
 
     #[test]

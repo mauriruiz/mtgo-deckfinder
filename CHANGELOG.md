@@ -8,6 +8,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Phase 2: pure, deterministic `Ranker` (`rank::rank_decks`) combining recency
+  (14-day half-life), source reliability, and result strength via a single
+  tunable `Weights` table (popularity/price reserved as hooks).
+- `list <format>` shows cached decks ranked best-first; `export <format> <rank>`
+  exports the nth-ranked deck to MTGO text.
 - Phase 1: real `WotcMtgoSource` (`DeckSource` trait) fetching recent decklists
   from mtgo.com via the per-event embedded JSON; handles both tournament
   (Challenge/Preliminary) and league (5-0) schemas.
@@ -29,3 +34,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `DeckStore` trait with a flat-JSON-file implementation (`JsonStore`).
 - CLI scaffold (`fetch` / `list` / `export`); `export --sample` writes the
   built-in sample Pauper deck to MTGO-importable text.
+
+### Fixed
+
+- `slug_date` parsed the separator dash before the year as a negative year, so
+  events on days ≥10 sorted below early-month ones and `fetch` only ever picked
+  the first nine days of the month. Now anchors the date to a digit.
+- Pin HTTP/1.1 — mtgo.com's HTTP/2 endpoint hangs.

@@ -35,6 +35,17 @@ pub enum EventType {
     Other,
 }
 
+impl std::fmt::Display for EventType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            EventType::League => "League",
+            EventType::Challenge => "Challenge",
+            EventType::Preliminary => "Preliminary",
+            EventType::Other => "Other",
+        })
+    }
+}
+
 /// A deck's finishing result in its event. Fields are optional; sources vary.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct EventResult {

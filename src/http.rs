@@ -27,6 +27,8 @@ impl PoliteClient {
         let client = Client::builder()
             .user_agent(USER_AGENT)
             .timeout(Duration::from_secs(120))
+            // mtgo.com's HTTP/2 endpoint hangs (verified); pin HTTP/1.1.
+            .http1_only()
             .build()?;
         Ok(Self {
             client,

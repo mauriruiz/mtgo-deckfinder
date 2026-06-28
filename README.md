@@ -3,14 +3,15 @@
 A small, CLI-first Rust utility to find recent competitive **Magic: The Gathering
 Online (MTGO)** decklists, rank them, and export them as MTGO-importable text.
 
-> **Status: Phase 1** — fetches and caches real decklists from the official MTGO
-> site and validates card names. Ranking (`list`) lands in Phase 2.
+> **Status: Phase 2** — fetches and caches real decklists, validates card names,
+> ranks them, and exports the one you pick.
 
 ## Quickstart
 
 ```sh
-cargo run -- fetch modern        # fetch + cache recent Modern decks
-cargo run -- export --sample     # write the built-in sample deck to deck.txt
+cargo run -- fetch modern          # fetch + cache recent Modern decks
+cargo run -- list modern           # show them ranked, best first
+cargo run -- export modern 1       # export the #1 deck to deck.txt
 ```
 
 The first `fetch` downloads the MTGJSON card-name reference (~50 MB, cached
@@ -19,14 +20,27 @@ pass `--refresh`.
 
 ## Commands
 
-| Command | Status | Description |
-|---------|--------|-------------|
-| `fetch <format> [--refresh]` | ✅ | Fetch recent decklists for a format and cache them. |
-| `export --sample [--out PATH]` | ✅ | Export the built-in sample deck (default `deck.txt`). |
-| `list <format>` | Phase 2 | List ranked cached decks. |
+| Command | Description |
+|---------|-------------|
+| `fetch <format> [--refresh]` | Fetch recent decklists for a format and cache them. |
+| `list <format> [--limit N]` | List cached decks ranked best-first. |
+| `export <format> <rank> [--out PATH]` | Export the nth-ranked deck (default `deck.txt`). |
+| `export --sample [--out PATH]` | Export the built-in sample deck. |
 
 Formats: `standard`, `modern`, `pauper`, `pioneer`, `vintage`, `legacy`,
 `limited`, `duel-commander`, `premodern`, `contraption`.
+
+## Ranking
+
+`list`/`export` order decks by a pure, deterministic score combining three
+factors (each normalized to 0..1, weighted in one place — `rank::DEFAULT_WEIGHTS`):
+
+- **Recency** — exponential decay, 14-day half-life.
+- **Source reliability** — per-source constant (WotC = 1.0).
+- **Result strength** — event type × placement: a winning-record Challenge beats
+  a League 5-0, which beats a Preliminary.
+
+Popularity (Phase 3) and price (Phase 4) are reserved as weight hooks.
 
 ## Export format
 
