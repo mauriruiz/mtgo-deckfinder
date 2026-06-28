@@ -2,7 +2,8 @@
 
 This tool finds recent, winning Magic: The Gathering Online (MTGO) decklists for
 you, ranks them from best to worst, and saves the one you choose as a file you
-can import straight into MTGO.
+can import straight into MTGO. It also shows each deck's approximate price and —
+if you load your collection — which decks are cheapest to finish or free to build.
 
 You do **not** need to know how to code. Just follow the steps and copy-paste the
 commands. Every command is typed into a program called **Terminal** (on Mac) or
@@ -79,14 +80,15 @@ mtgo-deckfinder fetch modern
 ```
 
 **What to expect:** the *first time ever* this is a little slow (it downloads a
-card database, about 50 MB, and politely waits between requests so it doesn't
-overload the MTGO website). This is normal. It only downloads the big database
-once. You'll see something like:
+card database, about 50 MB, looks up prices, and politely waits between requests
+so it doesn't overload the websites). This is normal. It only downloads the big
+database once. You'll see something like:
 
 ```
-Downloading MTGJSON card-name reference (~50 MB, cached afterwards)…
+Downloading MTGJSON card reference (~50 MB, cached afterwards)…
 Fetching recent modern decks from mtgo.com…
 Fetched and cached 439 modern decks (21 card-name warning(s)).
+Pricing 811 cards via Scryfall…
 ```
 
 > The "card-name warning(s)" line is harmless. It just means a few cards are so
@@ -106,21 +108,24 @@ mtgo-deckfinder list modern
 You'll see a table, best deck at the top:
 
 ```
-  #  score  date        event        result   player              source
-  1  1.000  2026-06-28  Challenge    #1       KingHairy           wotc-mtgo
-  2  0.981  2026-06-27  Challenge    #1       gazmon48            wotc-mtgo
-  3  0.973  2026-06-28  Challenge    #3       Polikasoll          wotc-mtgo
+  #  score  date        event        color    ~tix  result  archetype               player
+  1  0.953  2026-06-28  Challenge    UR      468.4  #1      Mox Opal / Mishra's B…  KingHairy
+  2  0.944  2026-06-28  Challenge    WUBG    613.9  #1      Force of Negation / …   gazmon48
+  3  0.936  2026-06-27  Challenge    UR      466.4  #3      Mox Opal / Mishra's B…  Polikasoll
   ...
 ```
 
 How to read it:
 
 - **#** — the deck's rank. **#1 is the best pick.**
-- **score** — higher is better (combines how recent, how strong the finish, and
-  how trustworthy the source is).
+- **score** — higher is better (combines how recent, how strong the finish, how
+  popular the archetype is, and how trustworthy the source is).
 - **date** — when the event happened.
 - **event** — Challenge and League decks are the strongest.
+- **color** — the deck's colors (W/U/B/R/G; `C` means colorless).
+- **~tix** — the approximate total MTGO price, in tix (an estimate).
 - **result** — `#1` means it won the event; `5-0` means an undefeated league run.
+- **archetype** — the deck's nickname, from its most-played cards.
 - **player** — who piloted it.
 
 Want to see more than the default 20 rows? Add `--limit`:
