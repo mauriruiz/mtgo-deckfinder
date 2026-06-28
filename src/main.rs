@@ -1,30 +1,39 @@
 //! `mtgo-deckfinder` CLI.
 //!
-//! `fetch <format>` pulls recent decks from mtgo.com (validating card names,
-//! detecting colors) and caches them. `list <format>` shows them ranked, with
-//! archetype labels and optional color filtering. `export <format> <n>` writes
-//! the nth-ranked deck (or `export --sample` the built-in deck) to MTGO text.
+//! `fetch <format>` pulls recent decks from mtgo.com (validating names, detecting
+//! colors, pricing via Scryfall) and caches them. `list <format>` shows them
+//! ranked, with optional `--colors` filter and `--view` (archetypes / buildable /
+//! cheapest / balance). `import-collection <file>` loads your owned cards so the
+//! tool can show what's cheapest to *complete*. `export` writes a deck to MTGO text.
 
-use std::collections::BTreeSet;
+use std::cmp::Ordering;
+use std::collections::HashSet;
 use std::path::PathBuf;
 use std::time::Duration as StdDuration;
 
-use anyhow::{Context, Result, anyhow};
+use anyhow::{Context, Result, anyhow, bail};
 use chrono::{DateTime, Duration, NaiveDate, Utc};
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
 
+use mtgo_deckfinder::cards::{card_keys, lookup_key};
 use mtgo_deckfinder::{
     Cache, CardReference, Clustering, Color, ColorMatch, DEFAULT_WEIGHTS, Deck, DeckSource, Format,
-    SIMILARITY_THRESHOLD, WotcMtgoSource, cluster_decks, color_matches, colors_label,
-    download_atomic_cards, export_mtgo_txt, http::PoliteClient, model::EventResult, parse_colors,
-    rank::score, rank_decks, sample_deck,
+    GapInfo, PriceTable, SIMILARITY_THRESHOLD, WotcMtgoSource, cluster_decks, color_matches,
+    colors_label, deck_gap, download_atomic_cards, export_mtgo_txt, fetch_prices,
+    http::PoliteClient, model::EventResult, parse_collection_csv, parse_colors, rank::score,
+    sample_deck,
 };
 
 /// Refetch decks older than this.
 const DECKS_TTL_HOURS: i64 = 12;
-/// Refetch the card reference older than this (MTGJSON updates daily; card data
-/// changes slowly, so a week is plenty).
+/// Refetch the card reference older than this.
 const CARDS_TTL_DAYS: i64 = 7;
+/// Refetch prices older than this (MTGO prices move daily).
+const PRICE_TTL_HOURS: i64 = 24;
+/// Base score at/above which a deck counts as "competitive" for price views.
+const STRENGTH_THRESHOLD: f64 = 0.6;
+/// Best-balance view: weight on normalized cost (strength − this·cost).
+const PRICE_PENALTY: f64 = 0.4;
 
 #[derive(Parser)]
 #[command(
@@ -37,64 +46,84 @@ struct Cli {
     command: Command,
 }
 
+/// Deck-selection view.
+#[derive(Clone, Copy, PartialEq, Eq, Default, ValueEnum)]
+enum View {
+    /// Best by strength (default).
+    #[default]
+    Ranked,
+    /// Most popular archetypes, biggest first.
+    Archetypes,
+    /// Only decks you can build now (needs an imported collection).
+    Buildable,
+    /// Lowest cost among competitive decks (cost-to-complete with a collection,
+    /// else total price).
+    Cheapest,
+    /// Best strength-for-cost trade-off among competitive decks.
+    Balance,
+}
+
 #[derive(Subcommand)]
 enum Command {
     /// Fetch recent decklists for a format and cache them.
     Fetch {
-        /// e.g. `modern`, `pauper`, `legacy`.
         #[arg(value_parser = parse_format)]
         format: Format,
         /// Ignore the cache and refetch from the network.
         #[arg(long)]
         refresh: bool,
     },
-    /// List cached decks for a format, best-ranked first.
+    /// Import an MTGO collection export (CSV) to enable cost-to-complete views.
+    ImportCollection {
+        /// Path to the MTGO collection CSV.
+        path: PathBuf,
+    },
+    /// List cached decks for a format.
     List {
         #[arg(value_parser = parse_format)]
         format: Format,
-        /// Max rows to show.
         #[arg(long, default_value_t = 20)]
         limit: usize,
         /// Filter to these colors, e.g. `--colors UR`.
         #[arg(long, value_parser = parse_color_set)]
-        colors: Option<BTreeSet<Color>>,
-        /// How `--colors` is matched: `subset` (default), `exact`, or `includes`.
+        colors: Option<HashSet8>,
+        /// How `--colors` matches: `subset` (default), `exact`, `includes`.
         #[arg(long, default_value = "subset", value_parser = parse_color_match)]
         color_match: ColorMatch,
-        /// Group by archetype and show the most popular ones first.
-        #[arg(long)]
-        archetypes: bool,
+        /// Selection view.
+        #[arg(long, value_enum, default_value_t = View::Ranked)]
+        view: View,
     },
     /// Export a deck to MTGO-importable text: `export <format> <rank>`, or `--sample`.
     Export {
-        /// Format whose cached, ranked decks to pick from.
         #[arg(value_parser = parse_format)]
         format: Option<Format>,
-        /// 1-based rank position to export (see `list`).
+        /// 1-based rank position within the chosen view (see `list`).
         rank: Option<usize>,
-        /// Filter to these colors before ranking, e.g. `--colors UR`.
         #[arg(long, value_parser = parse_color_set)]
-        colors: Option<BTreeSet<Color>>,
-        /// How `--colors` is matched: `subset` (default), `exact`, or `includes`.
+        colors: Option<HashSet8>,
         #[arg(long, default_value = "subset", value_parser = parse_color_match)]
         color_match: ColorMatch,
+        /// Which view's ordering to pick from.
+        #[arg(long, value_enum, default_value_t = View::Ranked)]
+        view: View,
         /// Export the built-in sample deck instead.
         #[arg(long)]
         sample: bool,
-        /// Output file path.
         #[arg(long, short, default_value = "deck.txt")]
         out: PathBuf,
     },
 }
 
+/// Alias to keep the clap arg type readable.
+type HashSet8 = std::collections::BTreeSet<Color>;
+
 fn parse_format(s: &str) -> Result<Format, String> {
     s.parse()
 }
-
-fn parse_color_set(s: &str) -> Result<BTreeSet<Color>, String> {
+fn parse_color_set(s: &str) -> Result<HashSet8, String> {
     parse_colors(s)
 }
-
 fn parse_color_match(s: &str) -> Result<ColorMatch, String> {
     s.parse()
 }
@@ -102,18 +131,20 @@ fn parse_color_match(s: &str) -> Result<ColorMatch, String> {
 fn main() -> Result<()> {
     match Cli::parse().command {
         Command::Fetch { format, refresh } => fetch(format, refresh)?,
+        Command::ImportCollection { path } => import_collection(&path)?,
         Command::List {
             format,
             limit,
             colors,
             color_match,
-            archetypes,
-        } => list(format, limit, filter(colors, color_match), archetypes)?,
+            view,
+        } => list(format, limit, filter(colors, color_match), view)?,
         Command::Export {
             format,
             rank,
             colors,
             color_match,
+            view,
             sample,
             out,
         } => {
@@ -122,31 +153,31 @@ fn main() -> Result<()> {
             } else {
                 let format = format.context("provide a format and rank, or pass --sample")?;
                 let rank = rank.context("provide a 1-based rank position, or pass --sample")?;
-                export_ranked(format, rank, filter(colors, color_match), &out)?;
+                export_ranked(format, rank, filter(colors, color_match), view, &out)?;
             }
         }
     }
     Ok(())
 }
 
-/// Pair a color set with its match mode, if a `--colors` filter was given.
-fn filter(
-    colors: Option<BTreeSet<Color>>,
-    mode: ColorMatch,
-) -> Option<(BTreeSet<Color>, ColorMatch)> {
+fn filter(colors: Option<HashSet8>, mode: ColorMatch) -> Option<(HashSet8, ColorMatch)> {
     colors.map(|c| (c, mode))
 }
 
-/// Cached decks for a format, color-filtered, clustered into archetypes, with
-/// per-deck popularity — the shared basis for `list` and `export`.
+// ---- shared preparation ----
+
+/// Cached decks for a format: color-filtered, clustered, priced, and (if a
+/// collection is loaded) gap-analyzed. Shared by `list` and `export`.
 struct Prepared {
-    decks: Vec<Deck>,
+    decks: Vec<Deck>, // est_price + archetype populated in place
     clustering: Clustering,
     popularity: Vec<f64>,
+    gaps: Vec<Option<GapInfo>>, // parallel to decks; None without a collection
+    has_collection: bool,
     fetched_at: DateTime<Utc>,
 }
 
-fn prepare(format: Format, filter: Option<(BTreeSet<Color>, ColorMatch)>) -> Result<Prepared> {
+fn prepare(format: Format, filter: Option<(HashSet8, ColorMatch)>) -> Result<Prepared> {
     let cache = Cache::default_location()?;
     let cached = cache.read_decks(format)?.ok_or_else(|| {
         anyhow!(
@@ -174,29 +205,51 @@ fn prepare(format: Format, filter: Option<(BTreeSet<Color>, ColorMatch)>) -> Res
         .map(|i| clustering.size_of(i) as f64 / max_size)
         .collect();
 
+    let prices = match cache.read_prices()? {
+        Some(c) => PriceTable::from_pairs(c.data),
+        None => PriceTable::from_pairs([]),
+    };
+    for d in &mut decks {
+        d.est_price = (!prices.is_empty()).then(|| prices.deck_price(d));
+    }
+
+    let collection = cache.read_collection()?.map(|c| c.data);
+    let gaps: Vec<Option<GapInfo>> = match &collection {
+        Some(coll) => decks
+            .iter()
+            .map(|d| Some(deck_gap(d, coll, &prices)))
+            .collect(),
+        None => vec![None; decks.len()],
+    };
+
     Ok(Prepared {
         decks,
         clustering,
         popularity,
+        gaps,
+        has_collection: collection.is_some(),
         fetched_at: cached.fetched_at,
     })
 }
 
+// ---- list ----
+
 fn list(
     format: Format,
     limit: usize,
-    filter: Option<(BTreeSet<Color>, ColorMatch)>,
-    archetypes: bool,
+    filter: Option<(HashSet8, ColorMatch)>,
+    view: View,
 ) -> Result<()> {
     let prep = prepare(format, filter)?;
     let today = Utc::now().date_naive();
-    if archetypes {
+    if view == View::Archetypes {
         list_archetypes(&prep, today, limit);
     } else {
-        list_decks(&prep, today, limit);
+        let order = order_decks(&prep, view, today)?;
+        print_deck_table(&prep, &order, limit, today);
     }
     println!(
-        "\nShowing up to {} of {} cached {} decks (fetched {}).",
+        "\nShowing up to {} of {} cached {} decks (fetched {}). Prices are approximate (Scryfall tix).",
         limit,
         prep.decks.len(),
         format.as_str(),
@@ -205,25 +258,114 @@ fn list(
     Ok(())
 }
 
-fn list_decks(prep: &Prepared, today: NaiveDate, limit: usize) {
-    let ranked = rank_decks(&prep.decks, today, &DEFAULT_WEIGHTS, &prep.popularity);
-    println!(
-        "{:>3}  {:>5}  {:<10}  {:<11}  {:<5}  {:<6}  {:<26}  player",
-        "#", "score", "date", "event", "color", "result", "archetype"
-    );
-    for (i, s) in ranked.iter().take(limit).enumerate() {
-        let d = s.deck;
+/// Indices of `prep.decks` in the order a view displays them.
+fn order_decks(prep: &Prepared, view: View, today: NaiveDate) -> Result<Vec<usize>> {
+    let n = prep.decks.len();
+    let scores: Vec<f64> = (0..n)
+        .map(|i| score(&prep.decks[i], today, &DEFAULT_WEIGHTS, prep.popularity[i]))
+        .collect();
+    let cost = |i: usize| -> f64 {
+        if prep.has_collection {
+            prep.gaps[i].as_ref().map_or(0.0, |g| g.cost_to_complete)
+        } else {
+            prep.decks[i].est_price.unwrap_or(0.0)
+        }
+    };
+    let by_strength = |a: &usize, b: &usize| {
+        scores[*b]
+            .partial_cmp(&scores[*a])
+            .unwrap_or(Ordering::Equal)
+            .then_with(|| prep.decks[*b].date.cmp(&prep.decks[*a].date))
+            .then_with(|| prep.decks[*a].id.cmp(&prep.decks[*b].id))
+    };
+
+    let mut idx: Vec<usize> = (0..n).collect();
+    match view {
+        View::Ranked => idx.sort_by(by_strength),
+        View::Buildable => {
+            if !prep.has_collection {
+                bail!("no collection loaded — run `import-collection <file>` first");
+            }
+            idx.retain(|&i| prep.gaps[i].as_ref().is_some_and(|g| g.buildable_now));
+            idx.sort_by(by_strength);
+        }
+        View::Cheapest => {
+            idx.retain(|&i| scores[i] >= STRENGTH_THRESHOLD);
+            idx.sort_by(|a, b| {
+                cost(*a)
+                    .partial_cmp(&cost(*b))
+                    .unwrap_or(Ordering::Equal)
+                    .then_with(|| by_strength(a, b))
+            });
+        }
+        View::Balance => {
+            idx.retain(|&i| scores[i] >= STRENGTH_THRESHOLD);
+            let max_cost = idx
+                .iter()
+                .map(|&i| cost(i))
+                .fold(0.0_f64, f64::max)
+                .max(1e-9);
+            let balance = |i: usize| scores[i] - PRICE_PENALTY * (cost(i) / max_cost);
+            idx.sort_by(|a, b| {
+                balance(*b)
+                    .partial_cmp(&balance(*a))
+                    .unwrap_or(Ordering::Equal)
+            });
+        }
+        View::Archetypes => unreachable!("handled in list()"),
+    }
+    Ok(idx)
+}
+
+fn print_deck_table(prep: &Prepared, order: &[usize], limit: usize, today: NaiveDate) {
+    if prep.has_collection {
         println!(
-            "{:>3}  {:>5.3}  {:<10}  {:<11}  {:<5}  {:<6}  {:<26}  {}",
-            i + 1,
-            s.score,
-            d.date,
-            d.event_type,
-            deck_colors_label(d),
-            result_label(&d.result),
-            truncate(d.archetype.as_deref().unwrap_or("-"), 26),
-            truncate(d.player.as_deref().unwrap_or("-"), 16),
+            "{:>3}  {:>5}  {:<10}  {:<11}  {:<5}  {:>6}  {:>4}  {:>6}  {:<6}  {:<22}  player",
+            "#", "score", "date", "event", "color", "~tix", "miss", "+tix", "result", "archetype"
         );
+    } else {
+        println!(
+            "{:>3}  {:>5}  {:<10}  {:<11}  {:<5}  {:>6}  {:<6}  {:<22}  player",
+            "#", "score", "date", "event", "color", "~tix", "result", "archetype"
+        );
+    }
+    for (rank, &i) in order.iter().take(limit).enumerate() {
+        let d = &prep.decks[i];
+        let s = score(d, today, &DEFAULT_WEIGHTS, prep.popularity[i]);
+        let price = d
+            .est_price
+            .map_or_else(|| "—".to_string(), |p| format!("{p:.1}"));
+        let arch = truncate(d.archetype.as_deref().unwrap_or("-"), 22);
+        let player = truncate(d.player.as_deref().unwrap_or("-"), 14);
+        if let Some(g) = prep.gaps[i].as_ref() {
+            println!(
+                "{:>3}  {:>5.3}  {:<10}  {:<11}  {:<5}  {:>6}  {:>4}  {:>6.1}  {:<6}  {:<22}  {}",
+                rank + 1,
+                s,
+                d.date,
+                d.event_type,
+                deck_colors_label(d),
+                price,
+                g.cards_missing,
+                g.cost_to_complete,
+                result_label(&d.result),
+                arch,
+                player,
+            );
+        } else {
+            println!(
+                "{:>3}  {:>5.3}  {:<10}  {:<11}  {:<5}  {:>6}  {:<6}  {:<22}  {}",
+                rank + 1,
+                s,
+                d.date,
+                d.event_type,
+                deck_colors_label(d),
+                price,
+                result_label(&d.result),
+                arch,
+                player,
+            );
+        }
     }
 }
 
@@ -232,7 +374,6 @@ fn list_archetypes(prep: &Prepared, today: NaiveDate, limit: usize) {
         .map(|i| score(&prep.decks[i], today, &DEFAULT_WEIGHTS, prep.popularity[i]))
         .collect();
 
-    // Best (highest-scored) representative deck per cluster.
     let n = prep.clustering.sizes.len();
     let mut best: Vec<Option<usize>> = vec![None; n];
     for i in 0..prep.decks.len() {
@@ -242,65 +383,83 @@ fn list_archetypes(prep: &Prepared, today: NaiveDate, limit: usize) {
         }
     }
 
-    // Clusters by popularity (size) first, then by their best deck's score.
     let mut clusters: Vec<usize> = (0..n).collect();
     clusters.sort_by(|&a, &b| {
         prep.clustering.sizes[b]
             .cmp(&prep.clustering.sizes[a])
             .then_with(|| {
-                let sb = best[b].map_or(0.0, |i| scores[i]);
-                let sa = best[a].map_or(0.0, |i| scores[i]);
-                sb.partial_cmp(&sa).unwrap_or(std::cmp::Ordering::Equal)
+                let (sb, sa) = (
+                    best[b].map_or(0.0, |i| scores[i]),
+                    best[a].map_or(0.0, |i| scores[i]),
+                );
+                sb.partial_cmp(&sa).unwrap_or(Ordering::Equal)
             })
     });
 
     println!(
-        "{:>3}  {:>5}  {:<5}  {:<28}  best representative",
-        "#", "decks", "color", "archetype"
+        "{:>3}  {:>5}  {:<5}  {:>6}  {:<28}  best representative",
+        "#", "decks", "color", "~tix", "archetype"
     );
     for (rank, &c) in clusters.iter().take(limit).enumerate() {
         let Some(i) = best[c] else { continue };
         let d = &prep.decks[i];
+        let price = d
+            .est_price
+            .map_or_else(|| "—".to_string(), |p| format!("{p:.1}"));
         println!(
-            "{:>3}  {:>5}  {:<5}  {:<28}  {} {} {} {}",
+            "{:>3}  {:>5}  {:<5}  {:>6}  {:<28}  {} {} {} {}",
             rank + 1,
             prep.clustering.sizes[c],
             deck_colors_label(d),
+            price,
             truncate(&prep.clustering.labels[c], 28),
             d.date,
             d.event_type,
             result_label(&d.result),
-            truncate(d.player.as_deref().unwrap_or("-"), 16),
+            truncate(d.player.as_deref().unwrap_or("-"), 14),
         );
     }
 }
 
+// ---- export ----
+
 fn export_ranked(
     format: Format,
     rank: usize,
-    filter: Option<(BTreeSet<Color>, ColorMatch)>,
+    filter: Option<(HashSet8, ColorMatch)>,
+    view: View,
     out: &PathBuf,
 ) -> Result<()> {
+    if view == View::Archetypes {
+        bail!("--view archetypes is not a deck list; use ranked / buildable / cheapest / balance");
+    }
     let prep = prepare(format, filter)?;
-    let ranked = rank_decks(
-        &prep.decks,
-        Utc::now().date_naive(),
-        &DEFAULT_WEIGHTS,
-        &prep.popularity,
-    );
-    let idx = rank
+    let order = order_decks(&prep, view, Utc::now().date_naive())?;
+    let pos = rank
         .checked_sub(1)
-        .filter(|&i| i < ranked.len())
-        .ok_or_else(|| anyhow!("rank {rank} out of range (1..={})", ranked.len()))?;
-    let deck = ranked[idx].deck;
-    write_deck(deck, out)?;
+        .filter(|&i| i < order.len())
+        .ok_or_else(|| anyhow!("rank {rank} out of range (1..={})", order.len()))?;
+    let i = order[pos];
+    let d = &prep.decks[i];
+    write_deck(d, out)?;
+    let price = d
+        .est_price
+        .map_or_else(|| "?".to_string(), |p| format!("~{p:.1} tix"));
+    let cost = prep.gaps[i]
+        .as_ref()
+        .map(|g| {
+            format!(
+                ", complete for ~{:.1} tix ({} missing)",
+                g.cost_to_complete, g.cards_missing
+            )
+        })
+        .unwrap_or_default();
     println!(
-        "  #{rank}  {}  {}  {}  [{}] {}",
-        deck.date,
-        deck.event_type,
-        result_label(&deck.result),
-        deck_colors_label(deck),
-        deck.archetype.as_deref().unwrap_or("-"),
+        "  #{rank}  {}  {}  [{}] {}  {price}{cost}",
+        d.date,
+        d.event_type,
+        deck_colors_label(d),
+        d.archetype.as_deref().unwrap_or("-"),
     );
     Ok(())
 }
@@ -312,14 +471,12 @@ fn write_deck(deck: &Deck, out: &PathBuf) -> Result<()> {
     Ok(())
 }
 
-/// WUBRG label for a deck's detected colors (`?` if colors weren't detected).
 fn deck_colors_label(deck: &Deck) -> String {
     deck.colors
         .as_ref()
         .map_or_else(|| "?".to_string(), colors_label)
 }
 
-/// Compact result column: tournament rank if known, else win-loss record.
 fn result_label(r: &EventResult) -> String {
     match (r.rank, r.wins, r.losses) {
         (Some(rank), _, _) => format!("#{rank}"),
@@ -336,13 +493,15 @@ fn truncate(s: &str, max: usize) -> String {
     }
 }
 
+// ---- fetch / import ----
+
 fn fetch(format: Format, refresh: bool) -> Result<()> {
     let cache = Cache::default_location()?;
     let now = Utc::now();
 
     let cards = load_cards(&cache, refresh, now)?;
 
-    if !refresh
+    let decks = if !refresh
         && let Some(cached) = cache.read_decks(format)?
         && !cached.is_stale(Duration::hours(DECKS_TTL_HOURS), now)
     {
@@ -352,33 +511,74 @@ fn fetch(format: Format, refresh: bool) -> Result<()> {
             format.as_str(),
             cached.fetched_at.format("%Y-%m-%d %H:%M UTC"),
         );
-        return Ok(());
-    }
-
-    println!("Fetching recent {} decks from mtgo.com…", format.as_str());
-    let mut decks = WotcMtgoSource::new()?.fetch_recent(format)?;
-
-    let mut warnings = 0;
-    for deck in &mut decks {
-        for card in deck.maindeck.iter().chain(&deck.sideboard) {
-            if !cards.is_valid(&card.name) {
-                warnings += 1;
-                eprintln!("warning: unknown card name in {}: {}", deck.id, card.name);
+        cached.data
+    } else {
+        println!("Fetching recent {} decks from mtgo.com…", format.as_str());
+        let mut decks = WotcMtgoSource::new()?.fetch_recent(format)?;
+        let mut warnings = 0;
+        for deck in &mut decks {
+            for card in deck.maindeck.iter().chain(&deck.sideboard) {
+                if !cards.is_valid(&card.name) {
+                    warnings += 1;
+                    eprintln!("warning: unknown card name in {}: {}", deck.id, card.name);
+                }
             }
+            deck.colors = Some(cards.deck_colors(&deck.maindeck));
         }
-        deck.colors = Some(cards.deck_colors(&deck.maindeck));
-    }
+        cache.write_decks(format, &decks, now)?;
+        println!(
+            "Fetched and cached {} {} decks ({warnings} card-name warning(s)).",
+            decks.len(),
+            format.as_str(),
+        );
+        decks
+    };
 
-    cache.write_decks(format, &decks, now)?;
+    // Always ensure prices exist for the format's cards (cheap if already cached).
+    price_cards(&cache, &decks, refresh, now)?;
+    Ok(())
+}
+
+fn import_collection(path: &PathBuf) -> Result<()> {
+    let text =
+        std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
+    let collection = parse_collection_csv(&text)?;
+    Cache::default_location()?.write_collection(&collection, Utc::now())?;
     println!(
-        "Fetched and cached {} {} decks ({warnings} card-name warning(s)).",
-        decks.len(),
-        format.as_str(),
+        "Imported collection: {} distinct cards. Collection-aware views (buildable / cheapest) are now active.",
+        collection.distinct_cards(),
     );
     Ok(())
 }
 
-/// Load the card reference from cache, downloading from MTGJSON if missing/stale.
+/// Price the cards across `decks` via Scryfall, caching results and only
+/// fetching names not already priced.
+fn price_cards(cache: &Cache, decks: &[Deck], refresh: bool, now: DateTime<Utc>) -> Result<()> {
+    let mut pairs = match (refresh, cache.read_prices()?) {
+        (false, Some(c)) if !c.is_stale(Duration::hours(PRICE_TTL_HOURS), now) => c.data,
+        _ => Vec::new(),
+    };
+    let known: HashSet<String> = pairs.iter().flat_map(|(n, _)| card_keys(n)).collect();
+
+    let mut need: Vec<String> = decks
+        .iter()
+        .flat_map(|d| d.maindeck.iter().chain(&d.sideboard))
+        .map(|c| c.name.clone())
+        .filter(|n| !known.contains(&lookup_key(n)))
+        .collect();
+    need.sort();
+    need.dedup();
+    if need.is_empty() {
+        return Ok(());
+    }
+
+    println!("Pricing {} cards via Scryfall…", need.len());
+    let scryfall = PoliteClient::new(StdDuration::from_millis(150))?;
+    pairs.extend(fetch_prices(&scryfall, &need)?);
+    cache.write_prices(&pairs, now)?;
+    Ok(())
+}
+
 fn load_cards(cache: &Cache, refresh: bool, now: DateTime<Utc>) -> Result<CardReference> {
     if !refresh
         && let Some(cached) = cache.read_cards()?
@@ -393,7 +593,6 @@ fn load_cards(cache: &Cache, refresh: bool, now: DateTime<Utc>) -> Result<CardRe
     Ok(CardReference::from_records(&records))
 }
 
-/// Card reference from cache only (no download); errors if `fetch` hasn't run.
 fn load_cached_reference(cache: &Cache) -> Result<CardReference> {
     let cached = cache
         .read_cards()?

@@ -5,8 +5,9 @@ use std::sync::Mutex;
 use std::thread::sleep;
 use std::time::{Duration, Instant};
 
-use reqwest::blocking::{Client, Response};
-use reqwest::header::ACCEPT;
+use reqwest::blocking::{Client, RequestBuilder, Response};
+use reqwest::header::{ACCEPT, CONTENT_TYPE};
+use serde::de::DeserializeOwned;
 
 use crate::USER_AGENT;
 use crate::error::{Error, Result};
@@ -47,6 +48,18 @@ impl PoliteClient {
         Ok(self.get(url)?.bytes()?.to_vec())
     }
 
+    /// POST a JSON body and deserialize the JSON response.
+    pub fn post_json<T: DeserializeOwned>(&self, url: &str, body: String) -> Result<T> {
+        let resp = self.send_retry(|| {
+            self.client
+                .post(url)
+                .header(ACCEPT, "application/json")
+                .header(CONTENT_TYPE, "application/json")
+                .body(body.clone())
+        })?;
+        Ok(serde_json::from_str(&resp.text()?)?)
+    }
+
     fn throttle(&self) {
         let mut last = self.last_request.lock().expect("lock poisoned");
         if let Some(prev) = *last {
@@ -59,12 +72,17 @@ impl PoliteClient {
     }
 
     fn get(&self, url: &str) -> Result<Response> {
-        // ponytail: fixed exponential backoff, no jitter — fine for a single-user
-        // CLI; add jitter if this ever runs many concurrent clients.
+        self.send_retry(|| self.client.get(url).header(ACCEPT, "*/*"))
+    }
+
+    /// Send a freshly-built request, throttled, retrying 429 / 5xx / transport
+    /// errors with exponential backoff. `make` is called once per attempt.
+    /// ponytail: fixed backoff, no jitter — fine for a single-user CLI.
+    fn send_retry(&self, make: impl Fn() -> RequestBuilder) -> Result<Response> {
         let mut backoff = Duration::from_secs(2);
         for attempt in 0..=MAX_RETRIES {
             self.throttle();
-            match self.client.get(url).header(ACCEPT, "*/*").send() {
+            match make().send() {
                 Ok(resp) => {
                     let status = resp.status();
                     if status.is_success() {
@@ -72,7 +90,7 @@ impl PoliteClient {
                     }
                     // Retry rate-limits and server errors; fail fast on other 4xx.
                     if status.as_u16() != 429 && !status.is_server_error() {
-                        return Err(Error::Parse(format!("HTTP {status} for {url}")));
+                        return Err(Error::Parse(format!("HTTP {status}")));
                     }
                 }
                 Err(e) if attempt == MAX_RETRIES => return Err(e.into()),
@@ -83,6 +101,6 @@ impl PoliteClient {
                 backoff *= 2;
             }
         }
-        Err(Error::Parse(format!("exhausted retries for {url}")))
+        Err(Error::Parse("exhausted retries".into()))
     }
 }

@@ -38,6 +38,17 @@ fn faces(name: &str) -> impl Iterator<Item = &str> {
     std::iter::once(name).chain(name.split(" // ").filter(move |p| *p != name))
 }
 
+/// All lookup keys for a card name (the full name plus each face), normalized.
+/// Shared by every name-keyed table (cards, prices) so they match identically.
+pub fn card_keys(name: &str) -> Vec<String> {
+    faces(name).map(key).collect()
+}
+
+/// The single lookup key for a card name, for point queries.
+pub fn lookup_key(name: &str) -> String {
+    key(name)
+}
+
 /// Per-card facts used by the rest of the tool.
 #[derive(Debug, Clone)]
 pub struct CardInfo {
@@ -68,8 +79,8 @@ impl CardReference {
                 colors: r.colors.iter().copied().collect(),
                 is_land: r.is_land,
             };
-            for face in faces(&r.name) {
-                cards.entry(key(face)).or_insert_with(|| info.clone());
+            for k in card_keys(&r.name) {
+                cards.entry(k).or_insert_with(|| info.clone());
             }
         }
         Self { cards }

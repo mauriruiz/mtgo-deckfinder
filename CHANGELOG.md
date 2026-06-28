@@ -8,6 +8,21 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Phase 4: approximate MTGO prices (tix) from Scryfall's batched
+  `/cards/collection` endpoint (`PriceTable`, `price::fetch_prices`); each deck
+  shows a total price, clearly labeled approximate.
+- Collection import: `import-collection <file.csv>` parses an MTGO collection
+  CSV (`collection::parse_collection_csv`, isolated + fixture-tested) into a
+  `Collection`; foil/non-foil rows summed.
+- Pure, quantity-aware gap computation (`gap::deck_gap` → `GapInfo` with
+  `cards_missing`, `cost_to_complete`, `buildable_now`).
+- `--view` selection: `ranked` (default), `archetypes`, `buildable`, `cheapest`,
+  `balance`. Collection-aware views (`buildable`, cost-to-complete `cheapest`)
+  activate once a collection is imported; otherwise `cheapest`/`balance` fall
+  back to total deck price. Price/cost are view modifiers only — never folded
+  into the base strength score.
+- `list --view archetypes` replaces the Phase 3 `--archetypes` flag.
+
 - Phase 3: archetype clustering by maindeck card overlap (`cluster::cluster_decks`,
   single-linkage at ≥80% shared cards), each cluster labeled by its most common
   non-land cards. Deterministic and tested.

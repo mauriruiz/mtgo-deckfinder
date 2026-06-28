@@ -3,8 +3,9 @@
 A small, CLI-first Rust utility to find recent competitive **Magic: The Gathering
 Online (MTGO)** decklists, rank them, and export them as MTGO-importable text.
 
-> **Status: Phase 3** — fetches and caches real decklists, validates card names,
-> detects colors, clusters archetypes, ranks them, and exports the one you pick.
+> **Status: Phase 4** — everything in Phase 3 plus approximate MTGO prices and
+> collection-aware views: import your MTGO collection to see what's cheapest to
+> *complete* and what you can build right now.
 
 > **New to the command line?** See **[HOW_TO_USE.md](HOW_TO_USE.md)** — a plain-language,
 > copy-paste runbook that needs no coding knowledge.
@@ -25,13 +26,18 @@ pass `--refresh`.
 
 | Command | Description |
 |---------|-------------|
-| `fetch <format> [--refresh]` | Fetch recent decklists for a format and cache them. |
-| `list <format> [--limit N] [--colors WUBRG] [--color-match MODE] [--archetypes]` | List cached decks ranked best-first, or (with `--archetypes`) the most popular archetypes. |
-| `export <format> <rank> [--colors WUBRG] [--out PATH]` | Export the nth-ranked deck (default `deck.txt`). |
+| `fetch <format> [--refresh]` | Fetch recent decklists (and prices) for a format and cache them. |
+| `import-collection <file.csv>` | Load your MTGO collection export to enable collection-aware views. |
+| `list <format> [--limit N] [--colors WUBRG] [--color-match MODE] [--view VIEW]` | List cached decks under a selection view. |
+| `export <format> <rank> [--colors WUBRG] [--view VIEW] [--out PATH]` | Export the nth deck in that view (default `deck.txt`). |
 | `export --sample [--out PATH]` | Export the built-in sample deck. |
 
 Formats: `standard`, `modern`, `pauper`, `pioneer`, `vintage`, `legacy`,
 `limited`, `duel-commander`, `premodern`, `contraption`.
+
+Views (`--view`): `ranked` (default, by strength), `archetypes` (most popular
+first), `buildable` (only decks you own — needs a collection), `cheapest` (lowest
+cost among competitive decks), `balance` (best strength-for-cost).
 
 ## Ranking
 
@@ -63,9 +69,34 @@ deck for each.
 
 ```sh
 cargo run -- list modern --colors UR              # UR (or within) decks, ranked
-cargo run -- list modern --archetypes             # most popular archetypes
+cargo run -- list modern --view archetypes        # most popular archetypes
 cargo run -- export modern 1 --colors UR          # export the best UR deck
 ```
+
+## Prices & your collection
+
+`fetch` also estimates each card's MTGO price (in **tix**) from Scryfall, so
+`list` shows an approximate total price per deck. **All prices are estimates.**
+
+Import your MTGO collection to unlock the more useful views — the central
+question being *"what's the best deck I can play for the least added cost?"*:
+
+```sh
+cargo run -- import-collection my-collection.csv   # MTGO → Export Collection (CSV)
+cargo run -- list modern --view buildable          # decks you can build right now
+cargo run -- list modern --view cheapest           # cheapest to COMPLETE (only missing cards)
+cargo run -- list modern --view balance            # strongest per tix
+cargo run -- export modern 1 --view cheapest        # export the cheapest-to-complete deck
+```
+
+With a collection loaded, `list` adds **miss** (missing card copies, quantity-
+aware) and **+tix** (cost to buy only those copies) columns, and `cheapest`
+sorts by cost-to-complete. Without a collection, `cheapest`/`balance` fall back
+to total deck price — the tool is fully usable either way.
+
+The collection file is MTGO's own collection CSV export (a `Card Name` and a
+`Quantity` column; other columns ignored, foil/non-foil summed). The exact
+assumed format is documented in `src/collection.rs` and easy to adjust.
 
 ## Export format
 
@@ -81,10 +112,14 @@ pass through unchanged.
   embedded in each page is parsed (more stable than the rendered HTML). Requests
   carry a descriptive User-Agent, are rate-limited (≥2 s apart), and retry
   transient failures with backoff. Only recent events are fetched, then cached.
-- **Card names:** the [MTGJSON](https://mtgjson.com) `AtomicCards` bulk file
-  (MIT-licensed), downloaded once, verified against its published `.sha256`, and
-  cached locally. Every exported card name is validated against this set so
-  export never silently emits a mangled name.
+- **Card names / colors:** the [MTGJSON](https://mtgjson.com) `AtomicCards` bulk
+  file (MIT-licensed), downloaded once, verified against its published `.sha256`,
+  and cached locally. Provides name validation, color identity, and land flags.
+- **Prices:** [Scryfall](https://scryfall.com) `prices.tix` via its batched
+  `/cards/collection` endpoint — only the cards in the cached decks are looked up
+  (a handful of requests), cached locally, and labeled approximate. GoatBots is
+  *not* used: its price files are `robots.txt`-disallowed and Cloudflare-gated,
+  so fetching them would breach polite-sourcing rules.
 
 Cache location: `<OS cache dir>/mtgo-deckfinder` (e.g. `~/Library/Caches/...`).
 

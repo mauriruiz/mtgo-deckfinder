@@ -11,10 +11,13 @@
 pub mod cache;
 pub mod cards;
 pub mod cluster;
+pub mod collection;
 pub mod error;
 pub mod export;
+pub mod gap;
 pub mod http;
 pub mod model;
+pub mod price;
 pub mod rank;
 pub mod sample;
 pub mod source;
@@ -23,12 +26,15 @@ pub mod store;
 pub use cache::{Cache, Cached};
 pub use cards::{CardInfo, CardRecord, CardReference, download_atomic_cards, normalize_name};
 pub use cluster::{Clustering, SIMILARITY_THRESHOLD, cluster_decks};
+pub use collection::{Collection, parse_collection_csv};
 pub use error::{Error, Result};
 pub use export::export_mtgo_txt;
+pub use gap::{GapInfo, deck_gap};
 pub use model::{
     CardEntry, Color, ColorMatch, Deck, EventResult, EventType, Format, color_matches,
     colors_label, parse_colors,
 };
+pub use price::{PriceTable, fetch_prices};
 pub use rank::{DEFAULT_WEIGHTS, Scored, Weights, rank_decks, score};
 pub use sample::sample_deck;
 pub use source::{DeckSource, WotcMtgoSource};

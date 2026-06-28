@@ -9,8 +9,14 @@ use serde::Serialize;
 use serde::de::DeserializeOwned;
 
 use crate::cards::CardRecord;
+use crate::collection::Collection;
 use crate::error::{Error, Result};
 use crate::model::{Deck, Format};
+
+/// A single cached card price: `(card name, tix)`.
+pub type PricePair = (String, f64);
+/// All cached card prices.
+pub type PricePairs = Vec<PricePair>;
 
 /// A cached payload tagged with when it was fetched.
 #[derive(Serialize, serde::Deserialize)]
@@ -77,6 +83,24 @@ impl Cache {
 
     pub fn write_cards(&self, records: &[CardRecord], now: DateTime<Utc>) -> Result<()> {
         self.write("cards.json", records, now)
+    }
+
+    /// Cached `(card name, tix)` price pairs.
+    pub fn read_prices(&self) -> Result<Option<Cached<PricePairs>>> {
+        self.read("prices.json")
+    }
+
+    pub fn write_prices(&self, pairs: &[PricePair], now: DateTime<Utc>) -> Result<()> {
+        self.write("prices.json", pairs, now)
+    }
+
+    /// The user's imported MTGO collection (no expiry — it's their snapshot).
+    pub fn read_collection(&self) -> Result<Option<Cached<Collection>>> {
+        self.read("collection.json")
+    }
+
+    pub fn write_collection(&self, collection: &Collection, now: DateTime<Utc>) -> Result<()> {
+        self.write("collection.json", collection, now)
     }
 }
 

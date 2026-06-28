@@ -166,6 +166,39 @@ for you.
 
 ---
 
+## Find a deck you can afford (optional)
+
+Each deck also shows an **approximate price** in tix (the `~tix` column). To find
+the best deck for the least money, you have two options.
+
+**Without your collection** — see the cheapest competitive decks:
+
+```sh
+mtgo-deckfinder list modern --view cheapest
+```
+
+**With your collection** — even better, see what's cheapest to *complete* (you
+only pay for the cards you're missing):
+
+1. In MTGO, export your collection to a CSV file (the client's "Export
+   Collection" option).
+2. Load it once:
+
+   ```sh
+   mtgo-deckfinder import-collection /path/to/your-collection.csv
+   ```
+
+3. Now these views know what you own:
+
+   ```sh
+   mtgo-deckfinder list modern --view buildable   # decks you can build right now (free)
+   mtgo-deckfinder list modern --view cheapest    # cheapest to finish — shows "miss" and "+tix"
+   ```
+
+   `miss` = how many cards you still need; `+tix` = the cost of just those cards.
+
+Prices are estimates and may not be exact.
+
 ## Getting the best results
 
 - **Pick from the top.** The list is already sorted best-first. #1 is the
@@ -196,6 +229,11 @@ for you.
 | Save the best deck | `mtgo-deckfinder export modern 1` |
 | Save the 5th-best deck | `mtgo-deckfinder export modern 5` |
 | Save with a custom filename | `mtgo-deckfinder export modern 1 --out burn.txt` |
+| See the cheapest good decks | `mtgo-deckfinder list modern --view cheapest` |
+| Load my MTGO collection | `mtgo-deckfinder import-collection my-cards.csv` |
+| See decks I can build now | `mtgo-deckfinder list modern --view buildable` |
+| See the most popular archetypes | `mtgo-deckfinder list modern --view archetypes` |
+| Only show my colors | `mtgo-deckfinder list modern --colors UR` |
 
 (Swap `modern` for any format you like.)
 
