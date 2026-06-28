@@ -3,49 +3,77 @@
 A small, CLI-first Rust utility to find recent competitive **Magic: The Gathering
 Online (MTGO)** decklists, rank them, and export them as MTGO-importable text.
 
-> **Status: Phase 0** — data model + pure exporter + local store. No network
-> sources yet. `fetch`/`list` are stubs landing in later phases.
+> **Status: Phase 1** — fetches and caches real decklists from the official MTGO
+> site and validates card names. Ranking (`list`) lands in Phase 2.
 
 ## Quickstart
 
 ```sh
-cargo run -- export --sample        # writes deck.txt
+cargo run -- fetch modern        # fetch + cache recent Modern decks
+cargo run -- export --sample     # write the built-in sample deck to deck.txt
 ```
 
-Open `deck.txt` and import it in MTGO ("Decks → Import").
+The first `fetch` downloads the MTGJSON card-name reference (~50 MB, cached
+afterwards). Subsequent fetches reuse the local cache until it goes stale or you
+pass `--refresh`.
 
 ## Commands
 
 | Command | Status | Description |
 |---------|--------|-------------|
+| `fetch <format> [--refresh]` | ✅ | Fetch recent decklists for a format and cache them. |
 | `export --sample [--out PATH]` | ✅ | Export the built-in sample deck (default `deck.txt`). |
-| `fetch <format>` | Phase 1 | Fetch recent decklists for a format. |
 | `list <format>` | Phase 2 | List ranked cached decks. |
+
+Formats: `standard`, `modern`, `pauper`, `pioneer`, `vintage`, `legacy`,
+`limited`, `duel-commander`, `premodern`, `contraption`.
 
 ## Export format
 
 MTGO text: one `"<qty> <name>"` per line — the maindeck block, a blank line, then
 the sideboard block (omitted when empty). Card names are emitted verbatim as
-canonical MTGO names, so split (`Fire // Ice`), DFC, adventure, and accented
-names pass through unchanged.
+canonical MTGO names, so split (`Wear/Tear`), DFC, adventure, and accented names
+pass through unchanged.
+
+## Data sources & politeness
+
+- **Decklists:** official MTGO published decklists at
+  [mtgo.com/decklists](https://www.mtgo.com/decklists). The per-event JSON
+  embedded in each page is parsed (more stable than the rendered HTML). Requests
+  carry a descriptive User-Agent, are rate-limited (≥2 s apart), and retry
+  transient failures with backoff. Only recent events are fetched, then cached.
+- **Card names:** the [MTGJSON](https://mtgjson.com) `AtomicCards` bulk file
+  (MIT-licensed), downloaded once, verified against its published `.sha256`, and
+  cached locally. Every exported card name is validated against this set so
+  export never silently emits a mangled name.
+
+Cache location: `<OS cache dir>/mtgo-deckfinder` (e.g. `~/Library/Caches/...`).
 
 ## Scope & constraints
 
 This tool **only creates/exports decklists** — it never automates or controls the
 MTGO client and never acquires cards. Price estimates (a later phase) will always
-be labeled approximate. Data sources are used politely (caching, rate limiting,
-descriptive User-Agent) and within their stated terms.
+be labeled approximate. Sources are used politely and within their stated terms.
+
+### Known limitations
+
+- Cards newer than the cached MTGJSON build are flagged with a validation
+  warning (their names still export verbatim — they are valid MTGO names). Run
+  `fetch --refresh` once MTGJSON catches up.
+- The largest league pages on mtgo.com occasionally return empty responses; such
+  events are skipped with a warning and picked up on a later fetch.
 
 ## Development
 
 ```sh
 cargo fmt
 cargo clippy -- -D warnings
-cargo test
+cargo test          # all parser/normalizer tests run offline against fixtures
 ```
 
-The core (model, exporter, future ranker) is pure and unit-tested without
-network or filesystem; sources, caching, and IO sit behind traits at the edges.
+The core (model, exporter, name validation, future ranker) is pure and
+unit-tested without network or filesystem; sources, caching, and IO sit behind
+traits at the edges.
 
 ## License
 

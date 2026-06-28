@@ -1,0 +1,488 @@
+{
+ "meta": {
+  "date": "2026-06-28",
+  "version": "5.2.2"
+ },
+ "data": {
+  "Ancient Stirrings": [
+   {
+    "name": "Ancient Stirrings",
+    "type": "X"
+   }
+  ],
+  "Arid Mesa": [
+   {
+    "name": "Arid Mesa",
+    "type": "X"
+   }
+  ],
+  "Basking Broodscale": [
+   {
+    "name": "Basking Broodscale",
+    "type": "X"
+   }
+  ],
+  "Blade of the Bloodchief": [
+   {
+    "name": "Blade of the Bloodchief",
+    "type": "X"
+   }
+  ],
+  "Boseiju, Who Endures": [
+   {
+    "name": "Boseiju, Who Endures",
+    "type": "X"
+   }
+  ],
+  "Cavern of Souls": [
+   {
+    "name": "Cavern of Souls",
+    "type": "X"
+   }
+  ],
+  "Consign to Memory": [
+   {
+    "name": "Consign to Memory",
+    "type": "X"
+   }
+  ],
+  "Devourer of Destiny": [
+   {
+    "name": "Devourer of Destiny",
+    "type": "X"
+   }
+  ],
+  "Dismember": [
+   {
+    "name": "Dismember",
+    "type": "X"
+   }
+  ],
+  "Eldrazi Temple": [
+   {
+    "name": "Eldrazi Temple",
+    "type": "X"
+   }
+  ],
+  "Emrakul, the Promised End": [
+   {
+    "name": "Emrakul, the Promised End",
+    "type": "X"
+   }
+  ],
+  "Ephemerate": [
+   {
+    "name": "Ephemerate",
+    "type": "X"
+   }
+  ],
+  "Flooded Strand": [
+   {
+    "name": "Flooded Strand",
+    "type": "X"
+   }
+  ],
+  "Forest": [
+   {
+    "name": "Forest",
+    "type": "X"
+   }
+  ],
+  "Glaring Fleshraker": [
+   {
+    "name": "Glaring Fleshraker",
+    "type": "X"
+   }
+  ],
+  "Gran-Gran": [
+   {
+    "name": "Gran-Gran",
+    "type": "X"
+   }
+  ],
+  "Grove of the Burnwillows": [
+   {
+    "name": "Grove of the Burnwillows",
+    "type": "X"
+   }
+  ],
+  "Guide of Souls": [
+   {
+    "name": "Guide of Souls",
+    "type": "X"
+   }
+  ],
+  "Haliya, Guided by Light": [
+   {
+    "name": "Haliya, Guided by Light",
+    "type": "X"
+   }
+  ],
+  "Hallowed Fountain": [
+   {
+    "name": "Hallowed Fountain",
+    "type": "X"
+   }
+  ],
+  "Haywire Mite": [
+   {
+    "name": "Haywire Mite",
+    "type": "X"
+   }
+  ],
+  "Kozilek's Command": [
+   {
+    "name": "Kozilek's Command",
+    "type": "X"
+   }
+  ],
+  "Malevolent Rumble": [
+   {
+    "name": "Malevolent Rumble",
+    "type": "X"
+   }
+  ],
+  "March of Otherworldly Light": [
+   {
+    "name": "March of Otherworldly Light",
+    "type": "X"
+   }
+  ],
+  "Marsh Flats": [
+   {
+    "name": "Marsh Flats",
+    "type": "X"
+   }
+  ],
+  "Meticulous Archive": [
+   {
+    "name": "Meticulous Archive",
+    "type": "X"
+   }
+  ],
+  "Mockingbird": [
+   {
+    "name": "Mockingbird",
+    "type": "X"
+   }
+  ],
+  "Mystical Dispute": [
+   {
+    "name": "Mystical Dispute",
+    "type": "X"
+   }
+  ],
+  "Ocelot Pride": [
+   {
+    "name": "Ocelot Pride",
+    "type": "X"
+   }
+  ],
+  "Phelia, Exuberant Shepherd": [
+   {
+    "name": "Phelia, Exuberant Shepherd",
+    "type": "X"
+   }
+  ],
+  "Pick Your Poison": [
+   {
+    "name": "Pick Your Poison",
+    "type": "X"
+   }
+  ],
+  "Pithing Needle": [
+   {
+    "name": "Pithing Needle",
+    "type": "X"
+   }
+  ],
+  "Plains": [
+   {
+    "name": "Plains",
+    "type": "X"
+   }
+  ],
+  "Quantum Riddler": [
+   {
+    "name": "Quantum Riddler",
+    "type": "X"
+   }
+  ],
+  "Solitude": [
+   {
+    "name": "Solitude",
+    "type": "X"
+   }
+  ],
+  "Soul-Guide Lantern": [
+   {
+    "name": "Soul-Guide Lantern",
+    "type": "X"
+   }
+  ],
+  "Soulless Jailer": [
+   {
+    "name": "Soulless Jailer",
+    "type": "X"
+   }
+  ],
+  "Springleaf Drum": [
+   {
+    "name": "Springleaf Drum",
+    "type": "X"
+   }
+  ],
+  "Starfield Shepherd": [
+   {
+    "name": "Starfield Shepherd",
+    "type": "X"
+   }
+  ],
+  "Teferi, Time Raveler": [
+   {
+    "name": "Teferi, Time Raveler",
+    "type": "X"
+   }
+  ],
+  "Temple Garden": [
+   {
+    "name": "Temple Garden",
+    "type": "X"
+   }
+  ],
+  "Thief of Existence": [
+   {
+    "name": "Thief of Existence",
+    "type": "X"
+   }
+  ],
+  "Ugin's Labyrinth": [
+   {
+    "name": "Ugin's Labyrinth",
+    "type": "X"
+   }
+  ],
+  "Urza's Saga": [
+   {
+    "name": "Urza's Saga",
+    "type": "X"
+   }
+  ],
+  "Veil of Summer": [
+   {
+    "name": "Veil of Summer",
+    "type": "X"
+   }
+  ],
+  "Vexing Bauble": [
+   {
+    "name": "Vexing Bauble",
+    "type": "X"
+   }
+  ],
+  "Walking Ballista": [
+   {
+    "name": "Walking Ballista",
+    "type": "X"
+   }
+  ],
+  "White Orchid Phantom": [
+   {
+    "name": "White Orchid Phantom",
+    "type": "X"
+   }
+  ],
+  "Windswept Heath": [
+   {
+    "name": "Windswept Heath",
+    "type": "X"
+   }
+  ],
+  "Wrath of the Skies": [
+   {
+    "name": "Wrath of the Skies",
+    "type": "X"
+   }
+  ],
+  "Fire // Ice": [
+   {
+    "name": "Fire // Ice",
+    "type": "X"
+   }
+  ],
+  "Delver of Secrets // Insectile Aberration": [
+   {
+    "name": "Delver of Secrets // Insectile Aberration",
+    "type": "X"
+   }
+  ],
+  "Brazen Borrower // Petty Theft": [
+   {
+    "name": "Brazen Borrower // Petty Theft",
+    "type": "X"
+   }
+  ],
+  "Lim-Dûl's Vault": [
+   {
+    "name": "Lim-Dûl's Vault",
+    "type": "X"
+   }
+  ],
+  "Fable of the Mirror-Breaker": [
+   {
+    "name": "Fable of the Mirror-Breaker",
+    "type": "X"
+   }
+  ],
+  "Voice of Victory": [
+   {
+    "name": "Voice of Victory",
+    "type": "X"
+   }
+  ],
+  "Seasoned Pyromancer": [
+   {
+    "name": "Seasoned Pyromancer",
+    "type": "X"
+   }
+  ],
+  "Sacred Foundry": [
+   {
+    "name": "Sacred Foundry",
+    "type": "X"
+   }
+  ],
+  "Dalkovan Encampment": [
+   {
+    "name": "Dalkovan Encampment",
+    "type": "X"
+   }
+  ],
+  "Ragavan, Nimble Pilferer": [
+   {
+    "name": "Ragavan, Nimble Pilferer",
+    "type": "X"
+   }
+  ],
+  "Celestial Purge": [
+   {
+    "name": "Celestial Purge",
+    "type": "X"
+   }
+  ],
+  "Blood Moon": [
+   {
+    "name": "Blood Moon",
+    "type": "X"
+   }
+  ],
+  "Elegant Parlor": [
+   {
+    "name": "Elegant Parlor",
+    "type": "X"
+   }
+  ],
+  "Orim's Chant": [
+   {
+    "name": "Orim's Chant",
+    "type": "X"
+   }
+  ],
+  "High Noon": [
+   {
+    "name": "High Noon",
+    "type": "X"
+   }
+  ],
+  "Wear/Tear": [
+   {
+    "name": "Wear/Tear",
+    "type": "X"
+   }
+  ],
+  "The Legend of Roku": [
+   {
+    "name": "The Legend of Roku",
+    "type": "X"
+   }
+  ],
+  "Lightning Bolt": [
+   {
+    "name": "Lightning Bolt",
+    "type": "X"
+   }
+  ],
+  "Galvanic Discharge": [
+   {
+    "name": "Galvanic Discharge",
+    "type": "X"
+   }
+  ],
+  "Obsidian Charmaw": [
+   {
+    "name": "Obsidian Charmaw",
+    "type": "X"
+   }
+  ],
+  "Mountain": [
+   {
+    "name": "Mountain",
+    "type": "X"
+   }
+  ],
+  "Ajani, Nacatl Pariah": [
+   {
+    "name": "Ajani, Nacatl Pariah",
+    "type": "X"
+   }
+  ],
+  "Reckless Pyrosurfer": [
+   {
+    "name": "Reckless Pyrosurfer",
+    "type": "X"
+   }
+  ],
+  "Den of the Bugbear": [
+   {
+    "name": "Den of the Bugbear",
+    "type": "X"
+   }
+  ],
+  "Ranger-Captain of Eos": [
+   {
+    "name": "Ranger-Captain of Eos",
+    "type": "X"
+   }
+  ],
+  "Burrenton Forge-Tender": [
+   {
+    "name": "Burrenton Forge-Tender",
+    "type": "X"
+   }
+  ],
+  "Thraben Charm": [
+   {
+    "name": "Thraben Charm",
+    "type": "X"
+   }
+  ],
+  "Arena of Glory": [
+   {
+    "name": "Arena of Glory",
+    "type": "X"
+   }
+  ],
+  "Rest in Peace": [
+   {
+    "name": "Rest in Peace",
+    "type": "X"
+   }
+  ],
+  "Goblin Bombardment": [
+   {
+    "name": "Goblin Bombardment",
+    "type": "X"
+   }
+  ]
+ }
+}

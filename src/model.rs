@@ -83,3 +83,59 @@ pub struct Deck {
     /// Estimated MTGO price; `None` until Phase 4. Always approximate.
     pub est_price: Option<f64>,
 }
+
+impl Format {
+    /// Canonical lowercase token used in cache filenames and CLI input.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Format::Standard => "standard",
+            Format::Modern => "modern",
+            Format::Pauper => "pauper",
+            Format::Pioneer => "pioneer",
+            Format::Vintage => "vintage",
+            Format::Legacy => "legacy",
+            Format::Limited => "limited",
+            Format::DuelCommander => "duel-commander",
+            Format::Premodern => "premodern",
+            Format::Contraption => "contraption",
+        }
+    }
+
+    /// Leading token of an mtgo.com decklist slug for this format, e.g.
+    /// `modern-` in `/decklist/modern-challenge-32-2026-06-01...`.
+    pub fn slug_prefix(self) -> &'static str {
+        match self {
+            // Slug uses `duel-` (commander events), not the full `duel-commander`.
+            Format::DuelCommander => "duel-",
+            Format::Standard => "standard-",
+            Format::Modern => "modern-",
+            Format::Pauper => "pauper-",
+            Format::Pioneer => "pioneer-",
+            Format::Vintage => "vintage-",
+            Format::Legacy => "legacy-",
+            Format::Limited => "limited-",
+            Format::Premodern => "premodern-",
+            Format::Contraption => "contraption-",
+        }
+    }
+}
+
+impl std::str::FromStr for Format {
+    type Err = String;
+
+    fn from_str(s: &str) -> std::result::Result<Self, String> {
+        Ok(match s.to_lowercase().as_str() {
+            "standard" => Format::Standard,
+            "modern" => Format::Modern,
+            "pauper" => Format::Pauper,
+            "pioneer" => Format::Pioneer,
+            "vintage" => Format::Vintage,
+            "legacy" => Format::Legacy,
+            "limited" => Format::Limited,
+            "duel" | "duel-commander" | "duelcommander" => Format::DuelCommander,
+            "premodern" => Format::Premodern,
+            "contraption" => Format::Contraption,
+            other => return Err(format!("unknown format: {other}")),
+        })
+    }
+}
