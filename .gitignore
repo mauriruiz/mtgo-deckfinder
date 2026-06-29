@@ -3,3 +3,5 @@
 .DS_Store
 # Personal MTGO collection exports dropped in the repo root (never commit these).
 /*.csv
+# Internal build-plan prompt — kept local, not tracked.
+/PRODUCT_DEFINITION_PROMPT.md
