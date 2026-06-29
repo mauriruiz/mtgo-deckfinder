@@ -35,6 +35,11 @@ impl Collection {
     pub fn distinct_cards(&self) -> usize {
         self.owned.len()
     }
+
+    /// Owned cards as `(lookup key, quantity)` pairs.
+    pub fn entries(&self) -> impl Iterator<Item = (&str, u32)> {
+        self.owned.iter().map(|(k, v)| (k.as_str(), *v))
+    }
 }
 
 /// Parse an MTGO collection CSV into a [`Collection`].

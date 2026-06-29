@@ -8,6 +8,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Phase 6 (Part A): `export --fit` collection-fitting. Swaps missing cards for
+  owned **Tier-1 land** equivalents (curated, keyless) to turn near-buildable
+  decks into buildable ones. Pure `fit_deck` behind a `SubstitutionProvider`
+  trait (opt-in AI spell substitution arrives in a follow-up); the original deck
+  is preserved, with a labeled diff and an honest remaining-gap summary. Basics
+  are never substituted, and in-core validation rejects any non-owned or
+  non-candidate pick.
+
 - Phase 4: approximate MTGO prices (tix) from Scryfall's batched
   `/cards/collection` endpoint (`PriceTable`, `price::fetch_prices`); each deck
   shows a total price, clearly labeled approximate.

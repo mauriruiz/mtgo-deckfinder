@@ -17,11 +17,11 @@ use clap::{Parser, Subcommand, ValueEnum};
 
 use mtgo_deckfinder::cards::{card_keys, lookup_key};
 use mtgo_deckfinder::{
-    Cache, CardReference, Clustering, Color, ColorMatch, DEFAULT_WEIGHTS, Deck, DeckSource, Format,
-    GapInfo, PriceTable, SIMILARITY_THRESHOLD, WotcMtgoSource, cluster_decks, color_matches,
-    colors_label, deck_gap, download_atomic_cards, export_mtgo_txt, fetch_prices,
-    http::PoliteClient, model::EventResult, parse_collection_csv, parse_colors, rank::score,
-    sample_deck,
+    Cache, CardReference, Clustering, Collection, Color, ColorMatch, DEFAULT_WEIGHTS, Deck,
+    DeckSource, Format, GapInfo, LandFitProvider, LandTable, PriceTable, SIMILARITY_THRESHOLD,
+    SubSource, WotcMtgoSource, cluster_decks, color_matches, colors_label, deck_gap,
+    download_atomic_cards, export_mtgo_txt, fetch_prices, fit_deck, http::PoliteClient,
+    model::EventResult, parse_collection_csv, parse_colors, rank::score, sample_deck,
 };
 
 /// Refetch decks older than this.
@@ -107,6 +107,10 @@ enum Command {
         /// Which view's ordering to pick from.
         #[arg(long, value_enum, default_value_t = View::Ranked)]
         view: View,
+        /// Fit the deck to your collection by swapping missing cards for owned
+        /// Tier-1 land equivalents (needs an imported collection).
+        #[arg(long)]
+        fit: bool,
         /// Export the built-in sample deck instead.
         #[arg(long)]
         sample: bool,
@@ -145,6 +149,7 @@ fn main() -> Result<()> {
             colors,
             color_match,
             view,
+            fit,
             sample,
             out,
         } => {
@@ -153,7 +158,7 @@ fn main() -> Result<()> {
             } else {
                 let format = format.context("provide a format and rank, or pass --sample")?;
                 let rank = rank.context("provide a 1-based rank position, or pass --sample")?;
-                export_ranked(format, rank, filter(colors, color_match), view, &out)?;
+                export_ranked(format, rank, filter(colors, color_match), view, fit, &out)?;
             }
         }
     }
@@ -195,7 +200,7 @@ fn prepare(format: Format, filter: Option<(HashSet8, ColorMatch)>) -> Result<Pre
         });
     }
 
-    let cards = load_cached_reference(&cache)?;
+    let (cards, prices, collection) = cache_inputs(&cache)?;
     let clustering = cluster_decks(&decks, &cards, SIMILARITY_THRESHOLD);
     for (i, d) in decks.iter_mut().enumerate() {
         d.archetype = Some(clustering.label_of(i).to_string());
@@ -205,15 +210,10 @@ fn prepare(format: Format, filter: Option<(HashSet8, ColorMatch)>) -> Result<Pre
         .map(|i| clustering.size_of(i) as f64 / max_size)
         .collect();
 
-    let prices = match cache.read_prices()? {
-        Some(c) => PriceTable::from_pairs(c.data),
-        None => PriceTable::from_pairs([]),
-    };
     for d in &mut decks {
         d.est_price = (!prices.is_empty()).then(|| prices.deck_price(d));
     }
 
-    let collection = cache.read_collection()?.map(|c| c.data);
     let gaps: Vec<Option<GapInfo>> = match &collection {
         Some(coll) => decks
             .iter()
@@ -428,6 +428,7 @@ fn export_ranked(
     rank: usize,
     filter: Option<(HashSet8, ColorMatch)>,
     view: View,
+    fit: bool,
     out: &PathBuf,
 ) -> Result<()> {
     if view == View::Archetypes {
@@ -441,6 +442,11 @@ fn export_ranked(
         .ok_or_else(|| anyhow!("rank {rank} out of range (1..={})", order.len()))?;
     let i = order[pos];
     let d = &prep.decks[i];
+
+    if fit {
+        return export_fitted(d, out);
+    }
+
     write_deck(d, out)?;
     let price = d
         .est_price
@@ -462,6 +468,64 @@ fn export_ranked(
         d.archetype.as_deref().unwrap_or("-"),
     );
     Ok(())
+}
+
+/// Write a collection-fitted variant of `deck`, with a labeled diff and an
+/// honest remaining-gap summary. The original deck is never modified.
+fn export_fitted(deck: &Deck, out: &PathBuf) -> Result<()> {
+    let cache = Cache::default_location()?;
+    let (cards, prices, collection) = cache_inputs(&cache)?;
+    let collection = collection.ok_or_else(|| {
+        anyhow!("--fit needs a collection — run `import-collection <file>` first")
+    })?;
+
+    let provider = LandFitProvider::new(LandTable::seed());
+    let fitted = fit_deck(deck, &collection, &cards, &prices, &provider);
+
+    write_deck(&fitted.deck, out)?;
+    if fitted.swaps.is_empty() {
+        println!("  No Tier-1 land swaps available for your collection.");
+    } else {
+        for s in &fitted.swaps {
+            let tag = match s.source {
+                SubSource::Tier1Land => "Tier-1 land",
+                SubSource::Ai => "AI: approximate",
+            };
+            println!(
+                "  - {} {}  → + {} {}  [{tag}]",
+                s.copies, s.removed, s.copies, s.added
+            );
+        }
+    }
+
+    let still: u32 = fitted.remaining.iter().map(|r| r.copies).sum();
+    if still == 0 {
+        println!("Buildable now with your collection (after Tier-1 land swaps).");
+    } else {
+        let cost: f64 = fitted
+            .remaining
+            .iter()
+            .filter_map(|r| r.tix.map(|t| t * f64::from(r.copies)))
+            .sum();
+        println!("Still missing after fitting: {still} cards (~{cost:.1} tix):");
+        for r in &fitted.remaining {
+            println!("    {} {}", r.copies, r.name);
+        }
+    }
+    println!("Note: the fitted deck is an approximation — swaps are equivalents, not guarantees.");
+    Ok(())
+}
+
+/// Load the cached card reference, price table, and (optional) collection — the
+/// shared inputs for ranking, gap analysis, and fitting.
+fn cache_inputs(cache: &Cache) -> Result<(CardReference, PriceTable, Option<Collection>)> {
+    let cards = load_cached_reference(cache)?;
+    let prices = match cache.read_prices()? {
+        Some(c) => PriceTable::from_pairs(c.data),
+        None => PriceTable::from_pairs([]),
+    };
+    let collection = cache.read_collection()?.map(|c| c.data);
+    Ok((cards, prices, collection))
 }
 
 fn write_deck(deck: &Deck, out: &PathBuf) -> Result<()> {

@@ -73,6 +73,8 @@ pub fn is_basic_land(name: &str) -> bool {
 /// Per-card facts used by the rest of the tool.
 #[derive(Debug, Clone)]
 pub struct CardInfo {
+    /// Proper card name (used when emitting a substituted card).
+    pub name: String,
     pub colors: BTreeSet<Color>,
     pub is_land: bool,
 }
@@ -97,6 +99,7 @@ impl CardReference {
         let mut cards = HashMap::new();
         for r in records {
             let info = CardInfo {
+                name: r.name.clone(),
                 colors: r.colors.iter().copied().collect(),
                 is_land: r.is_land,
             };
@@ -122,6 +125,11 @@ impl CardReference {
 
     pub fn is_land(&self, name: &str) -> bool {
         self.cards.get(&key(name)).is_some_and(|i| i.is_land)
+    }
+
+    /// Full per-card facts (name, colors, land flag), if known.
+    pub fn info(&self, name: &str) -> Option<&CardInfo> {
+        self.cards.get(&key(name))
     }
 
     /// A deck's color identity: the union over its maindeck cards' colors.

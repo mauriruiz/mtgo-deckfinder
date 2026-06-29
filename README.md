@@ -29,7 +29,7 @@ pass `--refresh`.
 | `fetch <format> [--refresh]` | Fetch recent decklists (and prices) for a format and cache them. |
 | `import-collection <file.csv>` | Load your MTGO collection export to enable collection-aware views. |
 | `list <format> [--limit N] [--colors WUBRG] [--color-match MODE] [--view VIEW]` | List cached decks under a selection view. |
-| `export <format> <rank> [--colors WUBRG] [--view VIEW] [--out PATH]` | Export the nth deck in that view (default `deck.txt`). |
+| `export <format> <rank> [--colors WUBRG] [--view VIEW] [--fit] [--out PATH]` | Export the nth deck in that view (default `deck.txt`); `--fit` fits it to your collection. |
 | `export --sample [--out PATH]` | Export the built-in sample deck. |
 
 Formats: `standard`, `modern`, `pauper`, `pioneer`, `vintage`, `legacy`,
@@ -97,6 +97,35 @@ to total deck price — the tool is fully usable either way.
 The collection file is MTGO's own collection CSV export (a `Card Name` and a
 `Quantity` column; other columns ignored, foil/non-foil summed). The exact
 assumed format is documented in `src/collection.rs` and easy to adjust.
+
+## Collection-fitting — turn near-buildable into buildable
+
+`export <format> <rank> --fit` produces a *collection-fitted* variant: it swaps a
+missing card for an interchangeable card you already own, turning "a few short"
+into "buildable now." It is **not** a deckbuilder — it starts from a proven list
+and makes only local, labeled substitutions; it never invents a card you don't own,
+and the unmodified deck stays the default output.
+
+**Part A (shipping, keyless):** a curated **Tier-1 land** table swaps a missing dual
+land for an owned equivalent of the same color pair (e.g. a missing `Steam Vents`
+for an owned `Sulfur Falls`). `--fit` shows a labeled diff and an honest list of
+what's still missing:
+
+```sh
+cargo run -- export pioneer 3 --fit
+#   - 3 Darkbore Pathway  → + 3 Woodland Cemetery  [Tier-1 land]
+#   - 4 Overgrown Tomb    → + 4 Woodland Cemetery  [Tier-1 land]
+#   Buildable now with your collection (after Tier-1 land swaps).
+```
+
+Basic lands are never substituted (free in MTGO). The fitted deck is an
+approximation — swaps are equivalents, not guarantees.
+
+**Part B (planned):** opt-in AI spell substitution behind a `SubstitutionProvider`
+trait, provider-agnostic (an OpenAI-compatible endpoint; base URL + model + key
+read from env). The model only ever *selects* from cards you already own; every
+pick is validated and hallucinated/unowned picks are rejected. Keyless Tier-1
+fitting always works with no key.
 
 ## Export format
 

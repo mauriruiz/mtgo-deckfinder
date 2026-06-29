@@ -14,6 +14,7 @@ pub mod cluster;
 pub mod collection;
 pub mod error;
 pub mod export;
+pub mod fit;
 pub mod gap;
 pub mod http;
 pub mod model;
@@ -29,6 +30,9 @@ pub use cluster::{Clustering, SIMILARITY_THRESHOLD, cluster_decks};
 pub use collection::{Collection, parse_collection_csv};
 pub use error::{Error, Result};
 pub use export::export_mtgo_txt;
+pub use fit::{
+    FittedDeck, LandFitProvider, LandTable, SubSource, SubstitutionProvider, Swap, fit_deck,
+};
 pub use gap::{GapInfo, deck_gap};
 pub use model::{
     CardEntry, Color, ColorMatch, Deck, EventResult, EventType, Format, color_matches,
